@@ -1,6 +1,7 @@
 import os
 import csv
 import datetime
+import random
 
 import asyncio
 from enum import Enum
@@ -43,8 +44,7 @@ class Travian:
 
     async def fetch_bid_price(self):
         print("獲取出價價格")
-        res = self.session.get(f'{self.travian}/{self.PageUrl.bid.value}&reload=auto')
-        soup = BeautifulSoup(res.text, 'html.parser')
+        soup = await self.get_page(f'{self.travian}/{self.PageUrl.bid.value}&reload=auto')
         bid_table = soup.find('table')
         bid_tbody = bid_table.find('tbody')
         bid_trs = bid_tbody.find_all('tr')
@@ -64,28 +64,40 @@ class Travian:
             print(f'時間:{time}, 數量:{amount}, 產品:{name}, 單價:{silver_unit}, 取得時間:{created_at}')
         return bid_result
 
+    async def get_page(self, url) -> BeautifulSoup:
+        res = self.session.get(url)
+        soup = BeautifulSoup(res.text, 'html.parser')
+        while soup.find('div', class_='innerLoginBox') is not None:
+            print("嘗試重新登入...")
+            await self.login()
+            await asyncio.sleep(3)
+            res = self.session.get(url)
+            soup = BeautifulSoup(res.text, 'html.parser')
+        return soup
+
     async def save_bid_to_csv(self):
-        print("出價模組啟動")
+        print("紀錄出價啟動")
         if not os.path.exists('bid.csv'):
             print('找不到bid.csv，建立新檔案')
             with open('bid.csv', 'w') as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=self.bid_csv_header)
                 writer.writeheader()
         while True:
-            soup = await self.go_bid_page()
-            await asyncio.sleep(3)
-            if soup.find('div', class_='innerLoginBox') is not None:
-                # login
-                await self.login()
-                await asyncio.sleep(3)
             bid_result = await self.fetch_bid_price()
+            min_time = 0
             with open('bid.csv', 'a') as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=self.bid_csv_header)
                 for bid in bid_result:
                     if bid['time'] <= 30:
                         print(f"紀錄資料:{bid}")
                         writer.writerow(bid)
-            await asyncio.sleep(15)
+                    else:
+                        min_time = bid['time'] - 15
+                        break
+            min_time = max(min_time, 15)
+            wait_time = min(random.randint(120, 300), min_time)
+            print(f'waiting... {wait_time} seconds')
+            await asyncio.sleep(wait_time)
 
 
 if __name__ == "__main__":
