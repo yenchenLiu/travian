@@ -89,5 +89,5 @@ class Travian:
 
 
 if __name__ == "__main__":
-    t = Travian(username='', password='')
+    t = Travian(username=os.environ['T_USER'], password=os.environ['T_PASS'])
     asyncio.run(t.save_bid_to_csv())
