@@ -5,7 +5,7 @@ import random
 
 import asyncio
 from enum import Enum
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -81,7 +81,7 @@ class Travian:
             soup = BeautifulSoup(res.text, 'html.parser')
         return soup
 
-    async def auto_bid(self, bids, urlparse=None):
+    async def auto_bid(self, bids):
         print('判斷是否自動出價...')
         for bid in bids:
             if bid['name'] in self.AutoBidList:
