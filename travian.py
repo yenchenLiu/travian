@@ -57,7 +57,7 @@ class Travian:
             silver = int(bid_tr.find(class_='silver').text.strip())
             silver_unit = silver / amount
             time = int(bid_tr.find(class_='timer').attrs['value'])
-            created_at = str(datetime.datetime.now())
+            created_at = str(datetime.datetime.now()).split('.')[0]
             bid_result.append({'time': time, 'amount': amount, 'name': name,
                                'bids': bids, 'silver': silver, 'silver_unit': silver_unit,
                                'created_at': created_at})
