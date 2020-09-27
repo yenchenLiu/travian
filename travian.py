@@ -5,6 +5,7 @@ import random
 
 import asyncio
 from enum import Enum
+from urllib.parse import parse_qs
 
 import requests
 from bs4 import BeautifulSoup
@@ -15,6 +16,8 @@ class Travian:
         login = 'login.php'
         dorf = 'dorf1.php'
         bid = 'hero.php?t=4'
+
+    AutoBidList = {'Cage': 170, 'Ointment': 35, 'Small Bandage': 12}
 
     def __init__(self, username, password):
         self.username = username
@@ -27,7 +30,7 @@ class Travian:
         self.bid_csv_header = ('time', 'amount', 'name', 'bids', 'silver', 'silver_unit', 'created_at')
 
     async def login(self):
-        print("開始登入")
+        print("開始登入...")
         res = self.session.get(f'{self.travian}/{self.PageUrl.login.value}')
         soup = BeautifulSoup(res.text, 'html.parser')
         login_num = soup.find('input', attrs={'name': 'login'}).attrs['value']
@@ -38,12 +41,12 @@ class Travian:
         self.session.get(f'{self.travian}/{self.PageUrl.dorf.value}')
 
     async def go_bid_page(self) -> BeautifulSoup:
-        print("跳轉至出價頁面")
+        print("跳轉至出價頁面...")
         res = self.session.get(f'{self.travian}/{self.PageUrl.bid.value}')
         return BeautifulSoup(res.text, 'html.parser')
 
     async def fetch_bid_price(self):
-        print("獲取出價價格")
+        print("獲取出價價格...")
         soup = await self.get_page(f'{self.travian}/{self.PageUrl.bid.value}&reload=auto')
         bid_table = soup.find('table')
         bid_tbody = bid_table.find('tbody')
@@ -58,10 +61,13 @@ class Travian:
             silver_unit = silver / amount
             time = int(bid_tr.find(class_='timer').attrs['value'])
             created_at = str(datetime.datetime.now()).split('.')[0]
+            bid_a = bid_tr.find('a', class_='bidButton')
+            bid_url = None
+            if bid_a is not None:
+                bid_url = f'{self.travian}{bid_a.attrs["href"]}'
             bid_result.append({'time': time, 'amount': amount, 'name': name,
                                'bids': bids, 'silver': silver, 'silver_unit': silver_unit,
-                               'created_at': created_at})
-            print(f'時間:{time}, 數量:{amount}, 產品:{name}, 單價:{silver_unit}, 取得時間:{created_at}')
+                               'created_at': created_at, 'bid_url': bid_url})
         return bid_result
 
     async def get_page(self, url) -> BeautifulSoup:
@@ -75,8 +81,37 @@ class Travian:
             soup = BeautifulSoup(res.text, 'html.parser')
         return soup
 
-    async def save_bid_to_csv(self):
-        print("紀錄出價啟動")
+    async def auto_bid(self, bids, urlparse=None):
+        print('判斷是否自動出價...')
+        for bid in bids:
+            if bid['name'] in self.AutoBidList:
+                name = bid['name']
+                silver_unit = bid['silver_unit']
+                max_silver_unit = self.AutoBidList[name]
+                amount = bid['amount']
+                bid_silver = max_silver_unit * amount
+                bid_url = bid['bid_url']
+                time = bid['time']
+            else:
+                continue
+
+            if silver_unit < max_silver_unit and bid_url and time <= 600:
+                print(f"開始出價: {bid['name']} 嘗試價格為: {bid_silver}...")
+                soup = await self.get_page(bid['bid_url'])
+                submit_bit = soup.find('div', class_='submitBid')
+                if submit_bit:
+                    bid_a = soup.find('a', class_='bidButton')
+                    z_href = bid_a.attrs['href']
+                    z = parse_qs(urlparse.urlparse(z_href).query)['z'][0]
+                    a = parse_qs(urlparse.urlparse(bid_url).query)['a'][0]
+                    post_data = {'page': 1, 'filter': '', 'action': 'but', 'z': z, 'a': a,
+                                 'maxBid': bid_silver}
+                    self.session.post(f'{self.travian}/hero.php?t=4', data=post_data)
+                else:
+                    print("找不到出價提交")
+
+    async def save_bid_to_csv(self, auto_bid=False):
+        print("紀錄出價啟動...")
         if not os.path.exists('bid.csv'):
             print('找不到bid.csv，建立新檔案')
             with open('bid.csv', 'w') as csvfile:
@@ -84,13 +119,16 @@ class Travian:
                 writer.writeheader()
         while True:
             bid_result = await self.fetch_bid_price()
+            _auto_bid_task = None
+            if auto_bid:
+                _auto_bid_task = asyncio.create_task(self.auto_bid(bid_result))
             min_time = 0
             with open('bid.csv', 'a') as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=self.bid_csv_header)
                 for bid in bid_result:
                     if bid['time'] <= 30:
                         print(f"紀錄資料:{bid}")
-                        writer.writerow(bid)
+                        writer.writerow({k: v for k, v in bid.items() if k in self.bid_csv_header})
                     else:
                         min_time = bid['time'] - 15
                         break
@@ -98,8 +136,10 @@ class Travian:
             wait_time = min(random.randint(120, 300), min_time)
             print(f'waiting... {wait_time} seconds')
             await asyncio.sleep(wait_time)
+            if _auto_bid_task:
+                await _auto_bid_task
 
 
 if __name__ == "__main__":
     t = Travian(username=os.environ['T_USER'], password=os.environ['T_PASS'])
-    asyncio.run(t.save_bid_to_csv())
+    asyncio.run(t.save_bid_to_csv(auto_bid=True))
