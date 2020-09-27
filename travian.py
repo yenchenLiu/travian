@@ -5,7 +5,8 @@ import random
 
 import asyncio
 from enum import Enum
-from urllib.parse import parse_qs, urlparse
+import urllib.parse as urlparse
+from urllib.parse import parse_qs
 
 import requests
 from bs4 import BeautifulSoup
