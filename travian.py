@@ -101,13 +101,16 @@ class Travian:
                 soup = await self.get_page(bid['bid_url'])
                 submit_bit = soup.find('div', class_='submitBid')
                 if submit_bit:
-                    bid_a = soup.find('a', class_='bidButton')
-                    z_href = bid_a.attrs['href']
-                    z = parse_qs(urlparse.urlparse(z_href).query)['z'][0]
-                    a = parse_qs(urlparse.urlparse(bid_url).query)['a'][0]
-                    post_data = {'page': 1, 'filter': '', 'action': 'but', 'z': z, 'a': a,
-                                 'maxBid': bid_silver}
-                    self.session.post(f'{self.travian}/hero.php?t=4', data=post_data)
+                    try:
+                        bid_a = soup.find('a', class_='bidButton')
+                        z_href = bid_a.attrs['href']
+                        z = parse_qs(urlparse.urlparse(z_href).query)['z'][0]
+                        a = parse_qs(urlparse.urlparse(bid_url).query)['a'][0]
+                        post_data = {'page': 1, 'filter': '', 'action': 'but', 'z': z, 'a': a,
+                                     'maxBid': bid_silver}
+                        self.session.post(f'{self.travian}/hero.php?t=4', data=post_data)
+                    except Exception as e:
+                        print(f"出價失敗: {e}")
                 else:
                     print("找不到出價提交")
 
