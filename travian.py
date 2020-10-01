@@ -18,7 +18,7 @@ class Travian:
         dorf = 'dorf1.php'
         bid = 'hero.php?t=4'
 
-    AutoBidList = {'Cage': 170, 'Ointment': 35, 'Small Bandage': 12}
+    AutoBidList = {'Cage': 170, 'Ointment': 36, 'Small Bandage': 18}
 
     def __init__(self, username, password):
         self.username = username
@@ -64,12 +64,17 @@ class Travian:
             created_at = str(datetime.datetime.now()).split('.')[0]
             bid_a = bid_tr.find('a', class_='bidButton')
             bid_url = None
+            bid_button = None
             if bid_a is not None:
                 bid_url = f'{self.travian}{bid_a.attrs["href"]}'
+                bid_button = bid_a.text
             bid_result.append({'time': time, 'amount': amount, 'name': name,
                                'bids': bids, 'silver': silver, 'silver_unit': silver_unit,
-                               'created_at': created_at, 'bid_url': bid_url})
+                               'created_at': created_at, 'bid_url': bid_url, 'bid_button': bid_button})
         return bid_result
+
+    async def fetch_farm_page(self):
+        print("獲取農場名單")
 
     async def get_page(self, url) -> BeautifulSoup:
         res = self.session.get(url)
@@ -92,23 +97,31 @@ class Travian:
                 amount = bid['amount']
                 bid_silver = max_silver_unit * amount
                 bid_url = bid['bid_url']
+                bid_button = bid['bid_button']
                 time = bid['time']
             else:
                 continue
 
-            if silver_unit < max_silver_unit and bid_url and time <= 600:
+            if silver_unit < max_silver_unit and bid_button == 'bid' and bid_url and time <= 600:
                 print(f"開始出價: {bid['name']} 嘗試價格為: {bid_silver}...")
                 soup = await self.get_page(bid['bid_url'])
                 submit_bit = soup.find('div', class_='submitBid')
                 if submit_bit:
                     try:
-                        bid_a = soup.find('a', class_='bidButton')
-                        z_href = bid_a.attrs['href']
-                        z = parse_qs(urlparse.urlparse(z_href).query)['z'][0]
-                        a = parse_qs(urlparse.urlparse(bid_url).query)['a'][0]
-                        post_data = {'page': 1, 'filter': '', 'action': 'but', 'z': z, 'a': a,
-                                     'maxBid': bid_silver}
-                        self.session.post(f'{self.travian}/hero.php?t=4', data=post_data)
+                        bid_as = soup.find_all('a', class_='bidButton')
+                        z = None
+                        for bid_a in bid_as:
+                            z_href = bid_a.attrs['href']
+                            if parse_qs(urlparse.urlparse(z_href).query).get('z') is not None:
+                                z = parse_qs(urlparse.urlparse(z_href).query)['z'][0]
+                                break
+                        if z is not None:
+                            a = parse_qs(urlparse.urlparse(bid_url).query)['a'][0]
+                            post_data = {'page': 1, 'filter': '', 'action': 'but', 'z': z, 'a': a,
+                                         'maxBid': bid_silver}
+                            self.session.post(f'{self.travian}/hero.php?t=4', data=post_data)
+                        else:
+                            print("找不到 z 參數")
                     except Exception as e:
                         print(f"出價失敗: {e}")
                 else:
@@ -142,6 +155,9 @@ class Travian:
             await asyncio.sleep(wait_time)
             if _auto_bid_task:
                 await _auto_bid_task
+
+    async def main(self):
+        await asyncio.gather(self.save_bid_to_csv(auto_bid=True))
 
 
 if __name__ == "__main__":
