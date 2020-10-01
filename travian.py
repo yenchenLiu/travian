@@ -1,3 +1,4 @@
+import json
 import os
 import csv
 import datetime
@@ -18,7 +19,7 @@ class Travian:
         dorf = 'dorf1.php'
         bid = 'hero.php?t=4'
 
-    AutoBidList = {'Cage': 170, 'Ointment': 36, 'Small Bandage': 18}
+    AutoBidList = {'Cage': 160, 'Ointment': 36, 'Small Bandage': 18}
 
     def __init__(self, username, password):
         self.username = username
@@ -88,12 +89,16 @@ class Travian:
         return soup
 
     async def auto_bid(self, bids):
-        print('判斷是否自動出價...')
+        print('判斷是否自動出價，讀取出價列表...')
+        auto_bid_list = self.AutoBidList
+        if os.path.exists('bid.json'):
+            with open('bid.json') as f:
+                auto_bid_list = json.load(f)
         for bid in bids:
-            if bid['name'] in self.AutoBidList:
+            if bid['name'] in auto_bid_list:
                 name = bid['name']
                 silver_unit = bid['silver_unit']
-                max_silver_unit = self.AutoBidList[name]
+                max_silver_unit = auto_bid_list[name]
                 amount = bid['amount']
                 bid_silver = max_silver_unit * amount
                 bid_url = bid['bid_url']
